@@ -190,7 +190,10 @@ class MKLThreads(object):
             try:
                 cls._mkl_rt = ctypes.CDLL('libmkl_rt.so')
             except OSError:
-                cls._mkl_rt = ctypes.CDLL('mkl_rt.dll')
+                try:
+                    cls._mkl_rt = ctypes.CDLL('mkl_rt.dll')
+                except OSError:
+                    cls._mkl_rt = ctypes.CDLL('libmkl_rt.dylib')  # for someone might use miniconda
         return cls._mkl_rt
 
     @classmethod
