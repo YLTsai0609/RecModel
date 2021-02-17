@@ -7,6 +7,7 @@ from functools import partial
 import ctypes
 import sharedmem
 
+
 def iter_rows_two_matrices(A, B):
     """
     Idea from FROM https://github.com/benanne/wmf/blob/master/wmf.py
@@ -46,6 +47,17 @@ class RecModel:
         pass
 
     def rank(self, items, user, topn=None):
+        """
+        generate recommendation by model from given items and user
+        Args:
+            items (np.ndarray - shape(N,)): the items random sampled from all items, size N
+            user ([int, np.ndarray - shape(N, )]): single user or multiple user in a np.ndarray, size N
+            topn ([int], optional): top n items to retrun as recommendation. Defaults to None.
+
+        Return:
+
+        """
+
         pass
 
     def compute_hit(self, elem, rand_sampled, topn, dtype="float32"):
@@ -59,9 +71,10 @@ class RecModel:
 
             # Select a sample of rand_sampled items the user never bought.
 
-            # Sample some random items
-            rand_items = np.random.randint(0, self.num_items, size=(rand_sampled + 1))
-            rand_pos = np.random.randint(0, rand_sampled- (2 * topn.max()))
+            # Sample some random items (the rand_items are unique)
+            rand_items = np.random.choice(
+                self.num_items, size=(rand_sampled + 1), replace=False)
+            rand_pos = np.random.randint(0, rand_sampled - (2 * topn.max()))
 
             # Did the user buy any of them?
             # This is excluded for performance reasons.
@@ -87,7 +100,8 @@ class RecModel:
 
                 # Get the topn items form the random sampled items plus the truly bought item
                 rand_items[rand_pos] = item
-                candidates = self.rank(items=rand_items, users=user, topn=topn.max())
+                candidates = self.rank(
+                    items=rand_items, users=user, topn=topn.max())
 
                 #candidates = self.rank(items=np.insert(arr=rand_items, obj=int(rand_sampled * 0.5), values=item), users=user, topn=topn.max())
 
@@ -97,14 +111,17 @@ class RecModel:
                         sum_hits[pos] += 1
             return sum_hits
 
-    def eval_topn(self, test_mat, train_mat=None, eval_mat=None, topn=[10], rand_sampled =1000, cores=1, random_state=None, dtype='float32'):
+    def eval_topn(self, test_mat, train_mat=None, eval_mat=None, topn=[10], rand_sampled=1000,
+                  cores=1, random_state=None, dtype='float32'):
         """
         Ranking evaluation of models (for topn prediction).
-        :param test_mat: The actual matrix that should be evaluated on.
-        :param train_mat: To evaluate, for each user, random items that the user did not buy will be sampled. Therefore,
-        all other matrixes have to be known to make sure that the random items were not bought by that user.
-        :param eval_mat: To evaluate, for each user, random items that the user did not buy will be sampled. Therefore,
-        all other matrixes have to be known to make sure that the random items were not bought by that user.
+        :param test_mat: (sparse matrix) shape : (Users, Items) - The actual matrix that should be evaluated on.
+        :param train_mat: (sparse matrix) shape : (Users, Items) - To evaluate, for each user, random items that the user 
+            did not buy will be sampled. Therefore,
+            all other matrixes have to be known to make sure that the random items were not bought by that user.
+        :param eval_mat: (sparse matrix) shape : (Users, Items) - To evaluate, for each user, random items that the user 
+            did not buy will be sampled. Therefore,
+            all other matrixes have to be known to make sure that the random items were not bought by that user.
         :param topn: How many items should be looked for to find the potential hits?
         :param metric: Which metric should be used for evaluation? Should be one of  ARHR, PRECISION, RECALL
         :return: Evaluation score.
@@ -126,18 +143,20 @@ class RecModel:
         if cores == 1:
             with MKLThreads(1):
                 for elem in iter_rows_two_matrices(super_mat, test_mat):
-                    hits += self.compute_hit(elem, rand_sampled=rand_sampled, topn=topn)
+                    hits += self.compute_hit(elem,
+                                             rand_sampled=rand_sampled, topn=topn)
         else:
             with MKLThreads(1):
                 # Parallel computation of the recall.
                 pool = Pool(cores)
-                compute_hit_args = partial(self.compute_hit, rand_sampled=rand_sampled, topn=topn)
+                compute_hit_args = partial(
+                    self.compute_hit, rand_sampled=rand_sampled, topn=topn)
                 hits = np.stack(
                     (pool.map(compute_hit_args,
-                                (elem for elem in iter_rows_two_matrices(super_mat, test_mat))))).sum(axis=0)
+                              (elem for elem in iter_rows_two_matrices(super_mat, test_mat))))).sum(axis=0)
                 pool.close()
                 pool.join()
-                
+
         # Compute the precision at topn
         recall_dict = {}
         recall = hits / len(test_mat.nonzero()[0])
@@ -146,7 +165,7 @@ class RecModel:
             recall_dict[f"Recall@{topn[pos]}"] = recall[pos]
 
         return recall_dict
-        
+
     def eval_prec(self, utility_mat, metric='mse'):
         """
         Accuaracy-based evaluation of models.
@@ -163,7 +182,8 @@ class RecModel:
             non_zero_elements = utility_mat.nonzero()
 
             # Get predictions from the model
-            predictions = self.predict(users=non_zero_elements[0], items=non_zero_elements[1]).reshape(1, -1)
+            predictions = self.predict(
+                users=non_zero_elements[0], items=non_zero_elements[1]).reshape(1, -1)
 
             # Apply the corresponding eval metric to get result.
             if metric == 'RMSE':
@@ -177,6 +197,7 @@ class RecModel:
 
         else:
             raise ValueError("Metric {metric} is not implemented.")
+
 
 class MKLThreads(object):
     """
@@ -193,7 +214,8 @@ class MKLThreads(object):
                 try:
                     cls._mkl_rt = ctypes.CDLL('mkl_rt.dll')
                 except OSError:
-                    cls._mkl_rt = ctypes.CDLL('libmkl_rt.dylib')  # for someone might use miniconda
+                    # for someone might use miniconda
+                    cls._mkl_rt = ctypes.CDLL('libmkl_rt.dylib')
         return cls._mkl_rt
 
     @classmethod
