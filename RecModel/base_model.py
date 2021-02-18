@@ -12,6 +12,11 @@ def iter_rows_two_matrices(A, B):
     """
     Idea from FROM https://github.com/benanne/wmf/blob/master/wmf.py
     Getting the indices of each user for two matrices. Matrice A, B need the same number of rows!
+
+    Check the https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html
+    for csr_matrix meaning, 
+    csr_matrix.data means the nonzero elements in np.array format
+    csr_matrix.indices means the row index of nonzero elements in np.array format
     """
     # Make this save for empty rows!
 
@@ -61,13 +66,13 @@ class RecModel:
         pass
 
     def compute_hit(self, elem, rand_sampled, topn, dtype="float32"):
-        user, super_mat_dat, super_mat_idx, test_mat_dat, test_mat_idx = elem
-        if len(test_mat_dat) == 0:
+        user, super_mat_user_items, super_mat_user_items_idx, test_mat_user_items, test_mat_user_items_idx = elem
+        if len(test_mat_user_items) == 0:
             # Not a single item picked for this user in the test, mat
             return np.zeros(topn.shape, dtype=dtype)
         else:
             # Get all items the user bought in any of the matrices (i.e. the supermat)
-            items_selected = super_mat_idx
+            items_selected = super_mat_user_items_idx
 
             # Select a sample of rand_sampled items the user never bought.
 
@@ -96,7 +101,7 @@ class RecModel:
                 rand_items = np.append(rand_items, new_sample)"""
 
             sum_hits = np.zeros(topn.shape, dtype=dtype)
-            for item in test_mat_idx:
+            for item in test_mat_user_items_idx:
 
                 # Get the topn items form the random sampled items plus the truly bought item
                 rand_items[rand_pos] = item
@@ -125,7 +130,14 @@ class RecModel:
         :param topn: How many items should be looked for to find the potential hits?
         :param metric: Which metric should be used for evaluation? Should be one of  ARHR, PRECISION, RECALL
         :return: Evaluation score.
+
+        TODO
+            add param : n_users_in_test(int) default = None
+            modify param : rand_sampled(int) -> n_rand_sampled_items(int)
         """
+        # TODO
+        # assert n_users in test_mat
+        # sampling user in test_mat
         super_mat = test_mat
         if not train_mat is None:
             super_mat += train_mat
@@ -137,7 +149,8 @@ class RecModel:
         # if topn is not list make is one.
         if not isinstance(topn, np.ndarray):
             raise ValueError("Topn has to be a np.array")
-        # For each user, for each item select he interacted with, sample topn not selected items. Then let the model
+        # For each user, for each item select he interacted with,
+        # sample topn not selected items. Then let the model
         # rank the topn + 1 items at compare were the acutal by was ranked.
         hits = np.zeros(topn.shape, dtype=dtype)
         if cores == 1:
