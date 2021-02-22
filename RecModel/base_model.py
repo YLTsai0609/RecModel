@@ -14,7 +14,7 @@ def iter_rows_two_matrices(A, B):
     Getting the indices of each user for two matrices. Matrice A, B need the same number of rows!
 
     Check the https://docs.scipy.org/doc/scipy/reference/generated/scipy.sparse.csr_matrix.html
-    for csr_matrix meaning, 
+    for csr_matrix meaning,
     csr_matrix.data means the nonzero elements in np.array format
     csr_matrix.indices means the row index of nonzero elements in np.array format
     """
@@ -58,14 +58,13 @@ class RecModel:
             items (np.ndarray - shape(N,)): the items random sampled from all items, size N
             user ([int, np.ndarray - shape(N, )]): single user or multiple user in a np.ndarray, size N
             topn ([int], optional): top n items to retrun as recommendation. Defaults to None.
-
         Return:
-
         """
 
         pass
 
     def compute_hit(self, elem, rand_sampled, topn, dtype="float32"):
+        # TODO rename the 5 element in the tuple for better understanding
         user, super_mat_user_items, super_mat_user_items_idx, test_mat_user_items, test_mat_user_items_idx = elem
         if len(test_mat_user_items) == 0:
             # Not a single item picked for this user in the test, mat
@@ -93,11 +92,13 @@ class RecModel:
 
                 # How many samples do we have to draw again?
                 missing_items = rand_sampled - len(rand_items)
-                new_sample = np.random.randint(0, self.num_items, size=missing_items)
+                new_sample = np.random.randint(
+                    0, self.num_items, size=missing_items)
 
                 # If the newly sampled items still contain items that the user did consume, redo the sample.
                 while np.isin(new_sample, items_selected).any():
-                    new_sample = np.random.randint(0, self.num_items, size=missing_items)
+                    new_sample = np.random.randint(
+                        0, self.num_items, size=missing_items)
                 rand_items = np.append(rand_items, new_sample)"""
 
             sum_hits = np.zeros(topn.shape, dtype=dtype)
@@ -108,7 +109,7 @@ class RecModel:
                 candidates = self.rank(
                     items=rand_items, users=user, topn=topn.max())
 
-                #candidates = self.rank(items=np.insert(arr=rand_items, obj=int(rand_sampled * 0.5), values=item), users=user, topn=topn.max())
+                # candidates = self.rank(items=np.insert(arr=rand_items, obj=int(rand_sampled * 0.5), values=item), users=user, topn=topn.max())
 
                 # If the true item was in the topn we have a hit!
                 for pos in range(len(topn)):
@@ -116,39 +117,55 @@ class RecModel:
                         sum_hits[pos] += 1
             return sum_hits
 
-    def eval_topn(self, test_mat, train_mat=None, eval_mat=None, topn=[10], rand_sampled=1000,
+    def eval_topn(self, test_mat, train_mat=None, eval_mat=None, topn=[10],
+                  rand_sampled_users=1000,
+                  rand_sampled_items=1000,
                   cores=1, random_state=None, dtype='float32'):
-        """
-        Ranking evaluation of models (for topn prediction).
-        :param test_mat: (sparse matrix) shape : (Users, Items) - The actual matrix that should be evaluated on.
-        :param train_mat: (sparse matrix) shape : (Users, Items) - To evaluate, for each user, random items that the user 
-            did not buy will be sampled. Therefore,
-            all other matrixes have to be known to make sure that the random items were not bought by that user.
-        :param eval_mat: (sparse matrix) shape : (Users, Items) - To evaluate, for each user, random items that the user 
-            did not buy will be sampled. Therefore,
-            all other matrixes have to be known to make sure that the random items were not bought by that user.
-        :param topn: How many items should be looked for to find the potential hits?
-        :param metric: Which metric should be used for evaluation? Should be one of  ARHR, PRECISION, RECALL
-        :return: Evaluation score.
+        """Ranking evaluation of models (for topn prediction)
 
-        TODO
-            add param : n_users_in_test(int) default = None
-            modify param : rand_sampled(int) -> n_rand_sampled_items(int)
+        Args:
+            test_mat (csr_matrix) : shape : (Users, Items) The actual matrix that should be evaluated on.
+            train_mat (csr_matrix, optional): shape : (Users, Items) - To evaluate, for each user, random items that the user 
+                did not buy will be sampled. Therefore,
+                all other matrixes have to be known to make sure that the random items were not bought by that user. Default is None
+            eval_mat (csr_matrix, optional): shape : (Users, Items) - To evaluate, for each user, random items that the user. Defaults to None.
+            topn (list, optional): How many items should be looked for to find the potential hits?. Defaults to [10].
+            rand_sampled_users (int, optional): How many users will be sampled in test_mat, sampling for efficient evaluation?. Defaults to 1000.
+            rand_sampled_items (int, optional): How many items will be sampled when generate recommendation?. Defaults to 1000.
+            cores (int, optional): how many cores you wanna use. Defaults to 1.
+            random_state (int, optional): The random state for rand_sampled_users and rand_sampled_items. Defaults to None.
+            dtype (str, optional): dtype when we create hit matrix Defaults to 'float32'.
+
+        Raises:
+            ValueError: argument topn should be a np.ndarray
+
+        Returns:
+            dict: return recall@N in dict format
         """
-        # TODO
-        # assert n_users in test_mat
-        # sampling user in test_mat
+        assert rand_sampled_users is None or rand_sampled_users > 0, f'The number of test users ({rand_sampled_users}) should be > 0.'
+        assert rand_sampled_items > 0, f'The number of random sampling items ({rand_sampled_items}) should be > 0.'
+        # if topn is not list make is one.
+        if not isinstance(topn, np.ndarray):
+            raise ValueError("Topn has to be a np.ndarray")
+        if rand_sampled_users is None:
+            rand_sampled_users = test_mat.shape[0]
+        else:
+            rand_sampled_users = test_mat.shape[0] if rand_sampled_users is None else min(
+                rand_sampled_users, test_mat.shape[0])
+        print(f'This process will sampling {rand_sampled_users}')
+
+        if not random_state is None:
+            np.random.seed(random_state)
+        rand_user_ids = np.random.choice(
+            np.arange(test_mat.shape[0]), size=rand_sampled_users, replace=False)
+        test_mat = test_mat[rand_user_ids, :]
+
         super_mat = test_mat
         if not train_mat is None:
             super_mat += train_mat
         if not eval_mat is None:
             super_mat += eval_mat
-        if not random_state is None:
-            np.random.seed(random_state)
 
-        # if topn is not list make is one.
-        if not isinstance(topn, np.ndarray):
-            raise ValueError("Topn has to be a np.array")
         # For each user, for each item select he interacted with,
         # sample topn not selected items. Then let the model
         # rank the topn + 1 items at compare were the acutal by was ranked.
@@ -157,13 +174,13 @@ class RecModel:
             with MKLThreads(1):
                 for elem in iter_rows_two_matrices(super_mat, test_mat):
                     hits += self.compute_hit(elem,
-                                             rand_sampled=rand_sampled, topn=topn)
+                                             rand_sampled=rand_sampled_items, topn=topn)
         else:
             with MKLThreads(1):
                 # Parallel computation of the recall.
                 pool = Pool(cores)
                 compute_hit_args = partial(
-                    self.compute_hit, rand_sampled=rand_sampled, topn=topn)
+                    self.compute_hit, rand_sampled=rand_sampled_items, topn=topn)
                 hits = np.stack(
                     (pool.map(compute_hit_args,
                               (elem for elem in iter_rows_two_matrices(super_mat, test_mat))))).sum(axis=0)
