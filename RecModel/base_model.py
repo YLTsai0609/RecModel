@@ -141,6 +141,9 @@ class RecModel:
 
         Returns:
             dict: return recall@N in dict format
+        TODO : efficiency improvement, need a efficient way to acess the sparse matrix
+        SparseEfficiencyWarning: Changing the sparsity structure of a csr_matrix is expensive. lil_matrix is more efficient.
+        self._set_arrayXarray(i, j, x)
         """
         assert rand_sampled_users is None or rand_sampled_users > 0, f'The number of test users ({rand_sampled_users}) should be > 0.'
         assert rand_sampled_items > 0, f'The number of random sampling items ({rand_sampled_items}) should be > 0.'
